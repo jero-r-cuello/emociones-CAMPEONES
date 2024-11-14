@@ -302,7 +302,7 @@ def bio_process_nuevo(
         eda_signals, eda_info = eda_process_nuevo(eda, sampling_rate=sampling_rate)
         bio_info.update(eda_info)
         bio_df = pd.concat([bio_df, eda_signals], axis=1)
-
+        
     # EMG
     if emg is not None:
         print("Analizando EMG")
@@ -488,10 +488,52 @@ def cvxEDA_pyEDA(y, delta, tau0=2., tau1=0.7, delta_knot=10., alpha=8e-4, gamma=
 
     return (np.array(a).ravel() for a in (r, p, t, l, d, e, obj))
 
-#%%
+#%% Acá estoy armando para hacerlos todos juntos de una. Falta agregar lo de
+# agarrar la lb de cada video
 
+subjects = ["02","03","04","05","06"]
 
+for subject in subjects:
+    for bloque_n in range(1,9): # Por ahora no hubo sujetos que no tuvieran 8 bloques
+        print(f'Leyendo bloque {bloque_n} del sujeto {subject}')
+        bloque = pd.read_csv(f'sub-{subject}/ses-A/df_bloque_{bloque_n}_sujeto_{subject}.csv').drop("Unnamed: 0",axis=1)
+        
+        # Agarro el principio del primer estimulo y el final del ultimo en el bloque
+        primer_estimulo_bloque = bloque[bloque["description"] == "video_start"].index[0]
+        ultimo_estimulo_bloque = bloque[bloque["description"] == "video_end"].index[-1]
+        
+        # Me quedo con 30 segundos previos al primer estimulo (15 de lb y 15 extra para sacar hrv)
+        # y 15 posteriores al final del ultimo (para sacar hrv)
+        bloque_final = bloque[primer_estimulo_bloque-(30*512):ultimo_estimulo_bloque+(15*512)]
+        
+        print('Extrayendo features con neurokit')
+        df_bio, info_bio = bio_process_nuevo(ecg=bloque_final['ECG'], rsp=bloque_final['RESP'], eda=bloque_final['GSR'], keep=pd.DataFrame([bloque_final['time'],bloque_final['description']]).T, rsa=False, sampling_rate=512)
+        
+        # Los vuelvo a agarrar, porque el indice ya no corresponde al del df
+        primer_estimulo = df_bio[df_bio["description"] == "video_start"].index[0]
+        ultimo_estimulo = df_bio[df_bio["description"] == "video_end"].index[-1]
+        
+        print("Analizando HRV")
+        hrv, windows, windows_index = hrv_sliding_window(df_bio["ECG_R_Peaks"])
+        
+        print("Obteniendo SMNA")
+        [r, p, t, _ , _ , _ , _] = cvxEDA_pyEDA(df_bio["EDA_Clean"],1./512)
+        df_bio["SMNA"] = p
+        
+        # Corto el df entre el principio del primer estimulo y el final del ultimo
+        df_bio_final = df_bio[primer_estimulo:ultimo_estimulo+1]
+        df_bio_final.reset_index(inplace=True)
+        df_bio_final.drop("index",axis=1,inplace=True)
+        
+        # Agrego HRV al df final (lo hice acá porque me desaparecian datos si lo hacia
+        # antes de cortarlo)
+        df_bio_final["HRV"] = hrv
+        
+        print(f'Guardando datos fisio del {bloque_n} del sujeto {subject}')
+        df_bio_final.to_csv(f'sub-{subject}/ses-A/fisio_bloque_{bloque_n}_sujeto_{subject}.csv')
+        
 #%% Pruebas con un solo bloque, habria que hacerlo un bucle para iterar por bloques y por sujetos
+"""
 subject = "02"
 bloque_n = "2"
 
@@ -508,7 +550,7 @@ df_bio, info_bio = bio_process_nuevo(ecg=bloque_final['ECG'], rsp=bloque_final['
 # Guardo los df de interés para despues
 print(f'Guardando archivos en "sub-{subject}/ses-A"')
 df_bio.to_csv(f'sub-{subject}/ses-A/fisio_bloque_{bloque_n}_sujeto_{subject}.csv')
-
+"""
 #%%
 
 
