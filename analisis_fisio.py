@@ -491,10 +491,13 @@ def cvxEDA_pyEDA(y, delta, tau0=2., tau1=0.7, delta_knot=10., alpha=8e-4, gamma=
 #%% Acá estoy armando para hacerlos todos juntos de una. Falta agregar lo de
 # agarrar la lb de cada video
 
-subjects = ["02","03","04","05","06"]
+subjects = ["02","03","04", "05","06"] #
 
 for subject in subjects:
     for bloque_n in range(1,9): # Por ahora no hubo sujetos que no tuvieran 8 bloques
+        if subject == "05" and bloque_n == 3: # no se por qué pero este crashea
+            continue
+        
         print(f'Leyendo bloque {bloque_n} del sujeto {subject}')
         bloque = pd.read_csv(f'sub-{subject}/ses-A/df_bloque_{bloque_n}_sujeto_{subject}.csv').drop("Unnamed: 0",axis=1)
         
@@ -521,7 +524,7 @@ for subject in subjects:
         df_bio["SMNA"] = p
         
         # Corto el df entre el principio del primer estimulo y el final del ultimo
-        df_bio_final = df_bio[primer_estimulo:ultimo_estimulo+1]
+        df_bio_final = df_bio[primer_estimulo-(15*512):ultimo_estimulo+1]
         df_bio_final.reset_index(inplace=True)
         df_bio_final.drop("index",axis=1,inplace=True)
         
@@ -529,110 +532,5 @@ for subject in subjects:
         # antes de cortarlo)
         df_bio_final["HRV"] = hrv
         
-        print(f'Guardando datos fisio del {bloque_n} del sujeto {subject}')
+        print(f'Guardando datos fisio del bloque {bloque_n} del sujeto {subject}')
         df_bio_final.to_csv(f'sub-{subject}/ses-A/fisio_bloque_{bloque_n}_sujeto_{subject}.csv')
-        
-#%% Pruebas con un solo bloque, habria que hacerlo un bucle para iterar por bloques y por sujetos
-"""
-subject = "02"
-bloque_n = "2"
-
-bloque = pd.read_csv(f'sub-{subject}/ses-A/df_bloque_{bloque_n}_sujeto_{subject}.csv').drop("Unnamed: 0",axis=1)
-
-primer_estimulo = bloque[bloque["description"] == "video_start"].index[0]
-ultimo_estimulo = bloque[bloque["description"] == "video_end"].index[-1]
-
-bloque_final = bloque[primer_estimulo-(25*512):ultimo_estimulo+(15*512)]
-
-print('Extrayendo features con neurokit')
-df_bio, info_bio = bio_process_nuevo(ecg=bloque_final['ECG'], rsp=bloque_final['RESP'], eda=bloque_final['GSR'], keep=pd.DataFrame([bloque_final['time'],bloque_final['description']]).T, rsa=False, sampling_rate=512)
-
-# Guardo los df de interés para despues
-print(f'Guardando archivos en "sub-{subject}/ses-A"')
-df_bio.to_csv(f'sub-{subject}/ses-A/fisio_bloque_{bloque_n}_sujeto_{subject}.csv')
-"""
-#%%
-
-
-#%%
-df_bio = pd.read_csv(f'sub-{subject}/ses-A/fisio_bloque_{bloque_n}_sujeto_{subject}.csv').drop("Unnamed: 0",axis=1)
-
-#%% Prueba de función de hrv
-
-hrv, windows, windows_index = hrv_sliding_window(df_bio["ECG_R_Peaks"])
-
-indices_video_start = df_bio[df_bio["description"] == "video_start"].index
-indices_video_end = df_bio[df_bio["description"] == "video_end"].index
-
-tiempos_video_start = df_bio[df_bio["description"] == "video_start"].time
-tiempos_video_end = df_bio[df_bio["description"] == "video_end"].time
-
-primer_estimulo = indices_video_start[0]
-ultimo_estimulo = indices_video_end[-1]
-
-# Plot hrv y ecg_rat entre inicio video 1 y final video -1
-plt.figure(1)
-plt.plot(df_bio[primer_estimulo:ultimo_estimulo].time, 
-         df_bio[primer_estimulo:ultimo_estimulo].ECG_Rate, 
-         color="green",
-         label="ECG Rate")
-plt.plot(df_bio[primer_estimulo:ultimo_estimulo].time, 
-         hrv[0:len(df_bio[primer_estimulo:ultimo_estimulo])], 
-         color="orange",
-         label="HRV")
-plt.vlines(x=tiempos_video_start, 
-           ymin=0, ymax=hrv[0:len(df_bio[primer_estimulo:ultimo_estimulo])].max(), 
-           color="red", linestyle='--', label="Stimuli start")
-plt.vlines(x=tiempos_video_end, 
-           ymin=0, ymax=hrv[0:len(df_bio[primer_estimulo:ultimo_estimulo])].max(), 
-           color="blue", linestyle='--', label="Stimuli end")
-plt.legend()
-plt.title(f'HR and HRV of subject {subject} - block {bloque_n}')
-plt.show()
-
-# Plot eda entre inicio video 1 y final video -1
-plt.figure(2)
-plt.plot(df_bio[primer_estimulo:ultimo_estimulo].time, 
-         df_bio[primer_estimulo:ultimo_estimulo].EDA_Clean, 
-         color="orange",
-         label="EDA Clean")
-plt.vlines(x=tiempos_video_start, 
-           ymin=0, ymax=df_bio[primer_estimulo:ultimo_estimulo].EDA_Clean.max(), 
-           color="red", linestyle='--', label="Stimuli start")
-plt.vlines(x=tiempos_video_end, 
-           ymin=0, ymax=df_bio[primer_estimulo:ultimo_estimulo].EDA_Clean.max(), 
-           color="blue", linestyle='--', label="Stimuli end")
-plt.legend()
-plt.title(f'EDA Clean of subject {subject} - block {bloque_n}')
-plt.show()
-
-
-#%% Prueba de función de cvx_EDA-pyEDA
-
-[r, p, t, _ , _ , _ , _] = cvxEDA_pyEDA(df_bio["EDA_Clean"],1./512)
-#%%
-plt.figure(3)
-plt.plot(df_bio["time"], p, label="SMN activity", color="green")
-plt.vlines(x=tiempos_video_start, ymin=0, ymax=p.max(), color="red", linestyle='--', label="Stimuli start")
-plt.vlines(x=tiempos_video_end, ymin=0, ymax=p.max(), color="blue", linestyle='--', label="Stimuli end")
-plt.legend()
-plt.title(f'SMNA of subject {subject} - block {bloque_n}')
-plt.show()
-
-plt.figure(4)
-plt.plot(df_bio["time"], df_bio["EDA_Phasic"], label="Neurokit")
-plt.plot(df_bio["time"], r, label="pyEDA")
-plt.vlines(x=tiempos_video_start, ymin=0, ymax=r.max(), color="red", linestyle='--', label="Stimuli start")
-plt.vlines(x=tiempos_video_end, ymin=0, ymax=r.max(), color="blue", linestyle='--', label="Stimuli end")
-plt.legend()
-plt.title(f'EDA Phasic of subject {subject} - block {bloque_n}')
-plt.show()
-
-plt.figure(5)
-plt.plot(df_bio["time"], df_bio["EDA_Tonic"], label="Neurokit")
-plt.plot(df_bio["time"], t, label="pyEDA")
-plt.vlines(x=tiempos_video_start, ymin=0, ymax=t.max(), color="red", linestyle='--', label="Stimuli start")
-plt.vlines(x=tiempos_video_end, ymin=0, ymax=t.max(), color="blue", linestyle='--', label="Stimuli end")
-plt.legend()
-plt.title(f'EDA Tonic of subject {subject} - block {bloque_n}')
-plt.show()
