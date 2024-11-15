@@ -4,8 +4,6 @@ import ast
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import neurokit2 as nk
-import scipy.signal as sc
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(base_dir)
@@ -13,12 +11,10 @@ os.chdir(base_dir)
 #%%
 subjects = ["02", "03", "04", "05", "06"]#
 
-"""
 seleccion = ["EDA_Clean", "EDA_Phasic", "EDA_Tonic", "SCR_Peaks", "SCR_Amplitude", "SMNA",
              "ECG_Clean", "ECG_Rate", "ECG_R_Peaks", "HRV",
              "RSP_Clean", "RSP_Amplitude", "RSP_Rate", "RSP_RVT",
              "description", "time"]
-"""
 
 for subject in subjects:
     # Ya lo leo, porque corresponde al sujeto y asi me queda para despues
@@ -75,8 +71,12 @@ for subject in subjects:
         for n in range(len(video_dict)):
             print(f'Largo video {n+1}: {video_dict[n+1].time.max()}')
 
+        # Orden bloques beh, sin estimulos de práctica
+        orden_bloques_beh = df_beh[4:].block.unique()
+        bloque_actual = orden_bloques_beh[bloque_n-1]
+        
         # Agarro los videos correspondientes a este bloque
-        bloque_beh = df_beh[df_beh["block"]==float(bloque_n)]
+        bloque_beh = df_beh[df_beh["block"]==float(bloque_actual)]
 
         # Features que quiero agarrar del bloque comportamental
         id_videos = bloque_beh["id"]
