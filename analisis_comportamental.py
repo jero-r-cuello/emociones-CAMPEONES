@@ -71,12 +71,9 @@ for subject in subjects:
         for n in range(len(video_dict)):
             print(f'Largo video {n+1}: {video_dict[n+1].time.max()}')
 
-        # Orden bloques beh, sin estimulos de práctica
-        orden_bloques_beh = df_beh[4:].block.unique()
-        bloque_actual = orden_bloques_beh[bloque_n-1]
-        
+      
         # Agarro los videos correspondientes a este bloque
-        bloque_beh = df_beh[df_beh["block"]==float(bloque_actual)]
+        bloque_beh = df_beh[df_beh["subbloque_number"]==float(bloque_n)]
 
         # Features que quiero agarrar del bloque comportamental
         id_videos = bloque_beh["id"]
