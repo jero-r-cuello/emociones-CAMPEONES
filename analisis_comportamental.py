@@ -11,91 +11,93 @@ base_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(base_dir)
 
 #%%
+subjects = ["02", "03", "04", "05", "06"]#
 
-#%% Pruebas con un solo bloque para ver en un principio
-subject = "02"
-bloque = pd.read_csv("sub-02/ses-A/df_bloque_1_sujeto_02.csv").drop(["Unnamed: 0","Unnamed: 0.1"],axis=1)
-
-primer_estimulo = bloque[bloque["description"] == "video_start"].index[0]
-ultimo_estimulo = bloque[bloque["description"] == "video_end"].index[-1]
-
-bloque_final = bloque[primer_estimulo-(15*512):ultimo_estimulo+(15*512)]
-
-print('Extrayendo features con neurokit')
-df_bio, info_bio = bio_process_nuevo(ecg=bloque_final['ECG'], rsp=bloque_final['RESP'], eda=bloque_final['GSR'], keep=bloque_final['time'], rsa=False, sampling_rate=512)
-
-# Guardo los df de interés para despues
-print(f'Guardando archivos en "sub-{subject}/ses-A"')
-df_bio.to_csv(f'sub-{subject}/ses-A/fisio_sujeto_{subject}.csv')
-
-
-
-#%%
-subjects = ["02","03","04","05","06"]
-
-seleccion = ["EDA_Clean","EDA_Phasic","EDA_Tonic","SCR_Peaks","SCR_Amplitude",
-             "ECG_Clean","ECG_Rate", "ECG_R_Peaks",
-             "RSP_Clean","RSP_Amplitude","RSP_Rate","RSP_RVT",
-             "time"]
+"""
+seleccion = ["EDA_Clean", "EDA_Phasic", "EDA_Tonic", "SCR_Peaks", "SCR_Amplitude", "SMNA",
+             "ECG_Clean", "ECG_Rate", "ECG_R_Peaks", "HRV",
+             "RSP_Clean", "RSP_Amplitude", "RSP_Rate", "RSP_RVT",
+             "description", "time"]
+"""
 
 for subject in subjects:
-    df_fisio = pd.read_csv(f'sub-{subject}/ses-A/fisio_sujeto_{subject}.csv',usecols=seleccion)
-    df_markers = pd.read_csv(f'sub-{subject}/ses-A/marcadores_sujeto_{subject}.csv').drop("Unnamed: 0", axis=1)
-    
-    # Acá intenta mergear los datos y los markers según la columna time y onset (se te van a sumar filas)
-    df_markers.rename(columns={"onset": "time"}, inplace=True)
-    merged_df = pd.merge(df_fisio, df_markers, on='time', how='outer')
-    
-    video_dict = {}
-    
-    # Agarrar linea base
-    lb_start = merged_df.loc[merged_df["description"]=="baseline_start","time"]
-    lb_end = merged_df.loc[merged_df["description"]=="baseline_end","time"]
-    
-    video_dict[0] = merged_df[lb_start.index[0]+1:lb_end.index[0]].reset_index()
-    
-    # Agarrar los tiempos de los videos
-    video_start_times = merged_df.loc[merged_df["description"]=="video_start","time"]
-    video_end_times = merged_df.loc[merged_df["description"]=="video_end","time"]
-    
-    # Para cada indice y time en video_start_times
-    for i, t in enumerate(video_start_times):
-        print(i)
-        
-        # El slice se guarda con una llave en el diccionario
-#        try:
-        video_dict[i+1] = merged_df[(merged_df["time"] > video_start_times.iloc[i]) & (merged_df["time"] < video_end_times.iloc[i])].reset_index()
-        
-        # Por si hay más inicios de video que finales (quizas pasa con el último)
-   #     except IndexError:
-   #         video_dict[i+1] = merged_df[merged_df["time"] > video_start_times.iloc[i]].reset_index()
-    
-    # Largo aproximado de cada video
-    for n in range(len(video_dict)):
-        print(f'Largo video {n}: {len(video_dict[n])}')
-
-    
-    # Leo el df_beh y extraigo las columnas que quiero  
+    # Ya lo leo, porque corresponde al sujeto y asi me queda para despues
     df_beh = pd.read_csv(f'sub-{subject}/ses-A/beh/sub-{subject}_ses-A_task-Experiment_VR_non_immersive_beh.csv')
-    
-    id_videos = df_beh["id"]
-    valence_videos = df_beh["stimulus_type"]
-    annotations = [ast.literal_eval(continuous_annotation) for continuous_annotation in df_beh["continuous_annotation"]]
-    dimension_annotated = df_beh["dimension"]
 
-    for i, video in enumerate(id_videos):
-        df = video_dict[i+1]
-        df["time"] = df["time"]-df.loc[0,"time"]
-        df["video_id"] = video
-        df["stimulus_type"] = list(valence_videos)[i]
-        df["dimension_annotated"] = list(dimension_annotated)[i]
-        df_annotations = pd.DataFrame(annotations[i],columns=["annotation","time"])
-        annotations = pd.merge(df,df_annotations,on="time",how="outer")["annotation"]
-        df["annotation"] = annotations.interpolate(method='linear')
-        df["subject_id"] = subject
-    
-    df_final = pd.concat([df for df in video_dict.values()],ignore_index=True)
-    df_final.to_csv(f'sub-{subject}/ses-A/df_sub-{subject}_final.csv')
+    for bloque_n in range(1,9): # Por ahora no hubo sujetos que no tuvieran 8 bloques
+        if subject == "05" and bloque_n == 3: # no se por qué pero este crashea
+            continue
+
+        print(f'Procesando sujeto {subject} - bloque {bloque_n}')
+        bloque_fisio = pd.read_csv(f'sub-{subject}/ses-A/fisio_bloque_{bloque_n}_sujeto_{subject}.csv').drop("Unnamed: 0",axis=1)
+        
+        indices_video_start = bloque_fisio[bloque_fisio["description"] == "video_start"].index
+        indices_video_end = bloque_fisio[bloque_fisio["description"] == "video_end"].index
+
+        primer_estimulo = indices_video_start[0]
+        ultimo_estimulo = indices_video_end[-1]
+
+        # Agarrar linea base del sujeto / Esto va a haber que cambiarlo porque no lo tuve en cuenta anteeeeeeeeeeeeeees
+        """
+        lb_start = merged_df.loc[merged_df["description"]=="baseline_start","time"]
+        lb_end = merged_df.loc[merged_df["description"]=="baseline_end","time"]
+
+        video_dict[0] = merged_df[lb_start.index[0]+1:lb_end.index[0]].reset_index()
+        """
+
+        # Capaz no haga falta sacarlo así, porque se podría sacar directamente del df fisio haciendo el mismo corte
+        """
+        # Lineas base de los videos (15 segundos antes del inicio del video)
+        i_start_lb_videos = [(i-(15*512)) for i in indices_video_start]
+        i_end_lb_videos = indices_video_start
+
+        lb_dict = {}
+        # Guardar las lineas base
+        for i in indices_video_start:
+            lb_dict[i+1] = bloque[i_start_lb_videos[i]:i_end_lb_videos[i]]
+        """
+
+        video_dict = {}
+
+        # Para cada indice y time en video_start_times
+        for i, indice_video in enumerate(indices_video_start):
+            print(i)
+            
+            # El slice se guarda con una llave en el diccionario
+    #        try:
+            video_dict[i+1] = bloque_fisio[indices_video_start[i]:indices_video_end[i]].reset_index()
+            
+            # Por si hay más inicios de video que finales (quizas pasa con el último)
+    #     except IndexError:
+    #         video_dict[i+1] = merged_df[merged_df["time"] > video_start_times.iloc[i]].reset_index()
+        
+        # Largo aproximado de cada video
+        for n in range(len(video_dict)):
+            print(f'Largo video {n+1}: {video_dict[n+1].time.max()}')
+
+        # Agarro los videos correspondientes a este bloque
+        bloque_beh = df_beh[df_beh["block"]==float(bloque_n)]
+
+        # Features que quiero agarrar del bloque comportamental
+        id_videos = bloque_beh["id"]
+        valence_type = bloque_beh["stimulus_type"]
+        annotations = [ast.literal_eval(continuous_annotation) for continuous_annotation in bloque_beh["continuous_annotation"]]
+        dimension_annotated = bloque_beh["dimension"]
+
+        for i, video in enumerate(id_videos):
+            df = video_dict[i+1]
+            df["time"] = df["time"]-df.loc[0,"time"]
+            df["video_id"] = video
+            df["stimulus_type"] = list(valence_type)[i]
+            df["dimension_annotated"] = list(dimension_annotated)[i]
+            df_annotations = pd.DataFrame(annotations[i],columns=["annotation","time"])
+            merged_annotations = pd.merge(df,df_annotations,on="time",how="outer")["annotation"]
+            df["annotation"] = merged_annotations.interpolate(method='linear')
+            df["subject_id"] = subject
+        
+        df_final = pd.concat([df for df in video_dict.values()],ignore_index=True)
+        print(f'Guardando datos en df_sub-{subject}_block_{bloque_n}_final.csv')
+        df_final.to_csv(f'sub-{subject}/ses-A/df_sub-{subject}_block_{bloque_n}_final.csv')
 
 #%%
 
