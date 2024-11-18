@@ -100,8 +100,11 @@ for video in sujetos_por_video.keys():
         
         plt.figure(1)
         plt.plot(señal.time,stats.zscore(señal[f'{señal_objetivo}']),label=f"Subject {subject}")
+        plt.xlabel("Tiempo (s)")
+        plt.ylabel("Z-Score")
         plt.title(f'{señal_objetivo} - {video}')
         plt.legend()
+        plt.savefig(f'figs/{señal_objetivo}_{video}.png')
     plt.show()
 
 # %% Ver anotacion X de cada sujeto por estimulo
