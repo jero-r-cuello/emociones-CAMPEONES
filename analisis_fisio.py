@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 #%%
 import os
-import ast
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import neurokit2 as nk
 import cvxopt as cv
+from print_color import print as print_in_color
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(base_dir)
@@ -72,156 +72,6 @@ def ecg_process_nuevo(ecg_signal, sampling_rate=1000, method="neurokit"):
     # return signals DataFrame and R-peak locations
     return signals, info
 
-def eda_methods_nuevo(
-    sampling_rate=1000,
-    method="default",
-    method_cleaning="default",
-    method_peaks="default",
-    method_phasic="cvxeda",
-    **kwargs,
-):
-    """
-    Modificación para que el método de EDA_Tonic sea cvxOPT
-    Cambio el default de method_phasic a cvxeda (ahí arriba)
-    """
-    
-    # Sanitize inputs
-    method_cleaning = str(method).lower() if method_cleaning == "default" else str(method_cleaning).lower()
-    method_phasic = str(method).lower() if method_phasic == "default" else str(method_phasic).lower()
-    method_peaks = str(method).lower() if method_peaks == "default" else str(method_peaks).lower()
-
-    # Create dictionary with all inputs
-    report_info = {
-        "sampling_rate": sampling_rate,
-        "method_cleaning": method_cleaning,
-        "method_phasic": method_phasic,
-        "method_peaks": method_peaks,
-        "kwargs": kwargs,
-    }
-
-    # Get arguments to be passed to underlying functions
-    kwargs_cleaning, report_info = nk.misc.report.get_kwargs(report_info, nk.eda_clean)
-    kwargs_phasic, report_info = nk.misc.report.get_kwargs(report_info, nk.eda_phasic)
-    kwargs_peaks, report_info = nk.misc.report.get_kwargs(report_info, nk.eda_peaks)
-
-    # Save keyword arguments in dictionary
-    report_info["kwargs_cleaning"] = kwargs_cleaning
-    report_info["kwargs_phasic"] = kwargs_phasic
-    report_info["kwargs_peaks"] = kwargs_peaks
-
-    # Initialize refs list
-    refs = []
-
-    # 1. Cleaning
-    # ------------
-    report_info["text_cleaning"] = f"The raw signal, sampled at {sampling_rate} Hz,"
-    if method_cleaning == "biosppy":
-        report_info["text_cleaning"] += " was cleaned using the biosppy package."
-    elif method_cleaning in ["default", "neurokit", "nk"]:
-        report_info["text_cleaning"] += " was cleaned using the default method of the neurokit2 package."
-    elif method_cleaning in ["none"]:
-        report_info["text_cleaning"] += "was directly used without cleaning."
-    else:
-        report_info["text_cleaning"] += " was cleaned using the method described in " + method_cleaning + "."
-
-    # 2. Phasic decomposition
-    # -----------------------
-    report_info["text_phasic"] = "The signal was decomposed into phasic and tonic components using"
-    if method_phasic is None or method_phasic in ["none"]:
-        report_info["text_phasic"] = "There was no phasic decomposition carried out."
-    else:
-        report_info["text_phasic"] += " the method described in " + method_phasic + "."
-
-    # 3. Peak detection
-    # -----------------
-    report_info["text_peaks"] = "The cleaned signal was used to detect peaks using"
-    if method_peaks in ["gamboa2008", "gamboa"]:
-        report_info["text_peaks"] += " the method described in Gamboa et al. (2008)."
-        refs.append("""Gamboa, H. (2008). Multi-modal behavioral biometrics based on hci
-        and electrophysiology. PhD ThesisUniversidade.""")
-    elif method_peaks in ["kim", "kbk", "kim2004", "biosppy"]:
-        report_info["text_peaks"] += " the method described in Kim et al. (2004)."
-        refs.append("""Kim, K. H., Bang, S. W., & Kim, S. R. (2004). Emotion recognition system using short-term
-      monitoring of physiological signals. Medical and biological engineering and computing, 42(3),
-      419-427.""")
-    elif method_peaks in ["nk", "nk2", "neurokit", "neurokit2"]:
-        report_info["text_peaks"] += " the default method of the `neurokit2` package."
-        refs.append("https://doi.org/10.21105/joss.01667")
-    elif method_peaks in ["vanhalem2020", "vanhalem", "halem2020"]:
-        report_info["text_peaks"] += " the method described in Vanhalem et al. (2020)."
-        refs.append("""van Halem, S., Van Roekel, E., Kroencke, L., Kuper, N., & Denissen, J. (2020).
-      Moments That Matter? On the Complexity of Using Triggers Based on Skin Conductance to Sample
-      Arousing Events Within an Experience Sampling Framework. European Journal of Personality.""")
-    elif method_peaks in ["nabian2018", "nabian"]:
-        report_info["text_peaks"] += " the method described in Nabian et al. (2018)."
-        refs.append("""Nabian, M., Yin, Y., Wormwood, J., Quigley, K. S., Barrett, L. F., & Ostadabbas, S. (2018). An
-      Open-Source Feature Extraction Tool for the Analysis of Peripheral Physiological Data. IEEE
-      journal of translational engineering in health and medicine, 6, 2800711.""")
-    else:
-        report_info[
-            "text_peaks"
-        ] = f"The peak detection was carried out using the method {method_peaks}."
-
-    # References
-    report_info["references"] = list(np.unique(refs))
-    return report_info
-
-def eda_process_nuevo(
-    eda_signal, sampling_rate=1000, method="neurokit", report=None, **kwargs
-):
-    """
-    Modificación para que el método de EDA_Tonic sea cvxOPT
-    Cambio eda_methods() por eda_methods_nuevo()
-
-    """
-    # Sanitize input
-    eda_signal = nk.signal_sanitize(eda_signal)
-    methods = eda_methods_nuevo(sampling_rate=sampling_rate, method=method, **kwargs)
-
-    # Preprocess
-    # Clean signal
-    eda_cleaned = nk.eda_clean(
-        eda_signal,
-        sampling_rate=sampling_rate,
-        method=methods["method_cleaning"],
-        **methods["kwargs_cleaning"],
-    )
-    if methods["method_phasic"] is None or methods["method_phasic"].lower() == "none":
-        eda_decomposed = pd.DataFrame({"EDA_Phasic": eda_cleaned})
-    else:
-        eda_decomposed = nk.eda_phasic(
-            eda_cleaned,
-            sampling_rate=sampling_rate,
-            method=methods["method_phasic"],
-            **methods["kwargs_phasic"],
-        )
-
-    # Find peaks
-    peak_signal, info = nk.eda_peaks(
-        eda_decomposed["EDA_Phasic"].values,
-        sampling_rate=sampling_rate,
-        method=methods["method_peaks"],
-        amplitude_min=0.1,
-        **methods["kwargs_peaks"],
-    )
-    info["sampling_rate"] = sampling_rate  # Add sampling rate in dict info
-
-    # Store
-    signals = pd.DataFrame({"EDA_Raw": eda_signal, "EDA_Clean": eda_cleaned})
-
-    signals = pd.concat([signals, eda_decomposed, peak_signal], axis=1)
-
-    if report is not None:
-        # Generate report containing description and figures of processing
-        if ".html" in str(report):
-            fig = nk.eda_plot(signals, info, static=False)
-        else:
-            fig = None
-        nk.create_report(file=report, signals=signals, info=methods, fig=fig)
-
-    return signals, info
-
-
 def bio_process_nuevo(
     ecg=None,
     rsp=None,
@@ -234,9 +84,8 @@ def bio_process_nuevo(
     sampling_rate=1000,
 ):
     """
-    Modificación para que el método de EDA_Tonic sea cvxOPT
-    Cambio eda_process() por eda_process_nuevo()
-    Agrego parámetro rsa=False, si se cambia a True y hay señal ecg y rsp se analiza, sino no.
+    Modificación para que se use cvxEDA para analizar EDA.
+    También agrego parámetro rsa=False, si se cambia a True y hay señal ecg y rsp se analiza, sino no.
 
     """
     bio_info = {}
@@ -281,7 +130,7 @@ def bio_process_nuevo(
 
     # ECG
     if ecg is not None:
-        print("Analizando ECG")
+        print_in_color("Analizando ECG",color="magenta")
         ecg = nk.as_vector(ecg)
         ecg_signals, ecg_info = ecg_process_nuevo(ecg, sampling_rate=sampling_rate)
         bio_info.update(ecg_info)
@@ -289,7 +138,7 @@ def bio_process_nuevo(
         
     # RSP
     if rsp is not None:
-        print("Analizando resp")
+        print_in_color("Analizando RESP",color="magenta")
         rsp = nk.as_vector(rsp)
         rsp_signals, rsp_info = nk.rsp_process(rsp, sampling_rate=sampling_rate)
         bio_info.update(rsp_info)
@@ -297,15 +146,23 @@ def bio_process_nuevo(
 
     # EDA
     if eda is not None:
-        print("Analizando EDA")
+        print_in_color("Analizando EDA",color="magenta")
         eda = nk.as_vector(eda)
-        eda_signals, eda_info = eda_process_nuevo(eda, sampling_rate=sampling_rate)
-        bio_info.update(eda_info)
+        eda_clean = nk.eda_clean(eda,sampling_rate=sampling_rate)
+        [r, p, t, _ , _ , _ , _] = cvxEDA_pyEDA(eda_clean, 1./sampling_rate)
+        df_peaks = nk.eda_peaks(r,sampling_rate=sampling_rate)[0]
+        df_eda = {'EDA_Clean': eda_clean,
+                  'EDA_Phasic': r,
+                  'EDA_Tonic': t,
+                  'SMNA': p,}
+        eda_signals = pd.DataFrame(df_eda)
+
         bio_df = pd.concat([bio_df, eda_signals], axis=1)
+        bio_df = pd.concat([bio_df, df_peaks], axis=1)
         
     # EMG
     if emg is not None:
-        print("Analizando EMG")
+        print_in_color("Analizando EMG",color="magenta")
         emg = nk.as_vector(emg)
         emg_signals, emg_info = nk.emg_process(emg, sampling_rate=sampling_rate)
         bio_info.update(emg_info)
@@ -313,7 +170,7 @@ def bio_process_nuevo(
 
     # PPG
     if ppg is not None:
-        print("Analizando PPG")
+        print_in_color("Analizando PPG",color="magenta")
         ppg = nk.as_vector(ppg)
         ppg_signals, ppg_info = nk.ppg_process(ppg, sampling_rate=sampling_rate)
         bio_info.update(ppg_info)
@@ -321,7 +178,7 @@ def bio_process_nuevo(
 
     # EOG
     if eog is not None:
-        print("Analizando EOG")
+        print_in_color("Analizando EOG",color="magenta")
         eog = nk.as_vector(eog)
         eog_signals, eog_info = nk.eog_process(eog, sampling_rate=sampling_rate)
         bio_info.update(eog_info)
@@ -338,7 +195,7 @@ def bio_process_nuevo(
 
     # RSA
     if (ecg is not None and rsp is not None) and rsa:
-        print("Analizando HRV_RSA")
+        print_in_color("Analizando HRV-RSA",color="magenta")
         rsa = nk.hrv_rsa(
             ecg_signals,
             rsp_signals,
@@ -489,16 +346,15 @@ def cvxEDA_pyEDA(y, delta, tau0=2., tau1=0.7, delta_knot=10., alpha=8e-4, gamma=
     return (np.array(a).ravel() for a in (r, p, t, l, d, e, obj))
 
 #%% Acá estoy armando para hacerlos todos juntos de una. Falta agregar lo de
-# agarrar la lb de cada video
 
-subjects = ["02","03","04", "05","06"] #
+subjects = ["02","03","04","05","06"]
 
 for subject in subjects:
     for bloque_n in range(1,9): # Por ahora no hubo sujetos que no tuvieran 8 bloques
         if subject == "05" and bloque_n == 3: # no se por qué pero este crashea
             continue
         
-        print(f'Leyendo bloque {bloque_n} del sujeto {subject}')
+        print_in_color(f'Leyendo bloque {bloque_n} del sujeto {subject}',color="green")
         bloque = pd.read_csv(f'sub-{subject}/ses-A/df_bloque_{bloque_n}_sujeto_{subject}.csv').drop("Unnamed: 0",axis=1)
         
         # Agarro el principio del primer estimulo y el final del ultimo en el bloque
@@ -509,19 +365,15 @@ for subject in subjects:
         # y 15 posteriores al final del ultimo (para sacar hrv)
         bloque_final = bloque[primer_estimulo_bloque-(30*512):ultimo_estimulo_bloque+(15*512)]
         
-        print('Extrayendo features con neurokit')
+        print_in_color('Extrayendo features con neurokit',color="green")
         df_bio, info_bio = bio_process_nuevo(ecg=bloque_final['ECG'], rsp=bloque_final['RESP'], eda=bloque_final['GSR'], keep=pd.DataFrame([bloque_final['time'],bloque_final['description']]).T, rsa=False, sampling_rate=512)
         
         # Los vuelvo a agarrar, porque el indice ya no corresponde al del df
         primer_estimulo = df_bio[df_bio["description"] == "video_start"].index[0]
         ultimo_estimulo = df_bio[df_bio["description"] == "video_end"].index[-1]
         
-        print("Analizando HRV")
+        print_in_color("Analizando HRV",color="magenta")
         hrv, windows, windows_index = hrv_sliding_window(df_bio["ECG_R_Peaks"])
-        
-        print("Obteniendo SMNA")
-        [r, p, t, _ , _ , _ , _] = cvxEDA_pyEDA(df_bio["EDA_Clean"],1./512)
-        df_bio["SMNA"] = p
         
         # Corto el df entre el principio del primer estimulo y el final del ultimo
         df_bio_final = df_bio[primer_estimulo-(15*512):ultimo_estimulo+1]
@@ -532,5 +384,5 @@ for subject in subjects:
         # antes de cortarlo)
         df_bio_final["HRV"] = hrv
         
-        print(f'Guardando datos fisio del bloque {bloque_n} del sujeto {subject}')
+        print_in_color(f'Guardando datos fisio del bloque {bloque_n} del sujeto {subject}',color="green")
         df_bio_final.to_csv(f'sub-{subject}/ses-A/fisio_bloque_{bloque_n}_sujeto_{subject}.csv')
